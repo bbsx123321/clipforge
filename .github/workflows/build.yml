@@ -53,7 +53,7 @@ jobs:
         run: npm run build
 
       - name: Package installers (NSIS Setup + Portable)
-        run: npx electron-builder --win
+        run: npx electron-builder --win --publish never
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
