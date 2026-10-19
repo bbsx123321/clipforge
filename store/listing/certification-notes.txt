@@ -1,0 +1,33 @@
+Certification notes / 认证说明（复制此文件全部内容粘贴到提交页）
+
+English:
+
+ClipForge is a screen recorder with a built-in lightweight video editor. No sign-in, no account, no network required — all features work offline.
+
+How to test:
+1. Launch the app. A small floating control bar appears (this is the main window).
+2. Click the red "Start" button (or press F10). A 3-second countdown shows, then recording starts and the app minimizes to the system tray (tray icon turns red).
+3. Press F10 again (or click "Stop") to finish. The recording is saved as MP4 and appears in the "Recent" list below the control bar.
+4. Double-click a recording in the list to open the built-in player & editor: use the Trim button to mark start/end points on the timeline, then "Speed up", "Delete selection", "Undo", and "Export MP4".
+5. Global hotkeys: F10 = start/stop recording, F11 = pause/resume (customizable in Settings).
+
+Notes:
+- The window close button minimizes to tray (by design — tray-resident app). To fully quit: right-click the tray icon and choose "Quit".
+- The gear icon opens Settings: capture mode (fullscreen / region / app window), system audio & microphone toggles, output folder, hotkeys, and UI language (Chinese / English).
+- Recordings are saved only to the local output folder shown in Settings. The app collects no personal data (see privacy policy).
+
+中文：
+
+剪录坊 ClipForge 是一款录屏 + 轻量视频剪辑工具。无需登录、无账号、无网络要求，全部功能离线可用。
+
+测试步骤：
+1. 启动应用，出现悬浮控制条（即主窗口）。
+2. 点击红色「开始」按钮（或按 F10），出现 3 秒倒计时后自动开始录制，同时应用最小化到系统托盘（托盘图标变红）。
+3. 再按 F10（或点「停止」）结束录制，自动保存为 MP4 并出现在控制条下方的「最近录制」列表。
+4. 双击列表中的录制条目，进入内置播放器与剪辑器：点「裁剪」在时间轴上标记开始/结束点，可使用「加速选区」「删除选区」「撤销」「导出 MP4」。
+5. 全局快捷键：F10 = 开始/停止录制，F11 = 暂停/继续（可在设置中自定义）。
+
+说明：
+- 窗口关闭按钮为最小化到托盘（托盘常驻设计）。完全退出方式：右键托盘图标 → 「退出」。
+- 齿轮图标打开设置：录制模式（全屏/区域/软件窗口）、系统声音与麦克风开关、输出目录、快捷键、界面语言（中文/English）。
+- 录制内容仅保存在设置中显示的本地输出目录。应用不收集任何个人数据（见隐私政策）。

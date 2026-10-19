@@ -1,0 +1,40 @@
+# ClipForge 剪录坊 · 隐私政策 / Privacy Policy
+
+> 上架必填项：部署为公开 URL（GitHub Pages / Gitee Pages / 任意静态托管均可）后，
+> 将链接填入合作伙伴中心 listing 的「隐私政策 URL」。
+
+## 中文
+
+最后更新：2026 年 10 月
+
+剪录坊 ClipForge（以下简称"本应用"）由个人开发者开发并发布于微软商店。本应用不收集、不存储、不传输任何个人数据。
+
+**我们收集什么：** 无。本应用不包含任何用户账号系统、统计分析 SDK、广告组件或遥测模块。
+
+**录制内容的归属：** 你录制的一切视频与音频仅保存在你本机的输出目录中。开发者无法访问这些文件。删除最近录制记录或卸载应用时，磁盘上的视频文件不会被自动删除（删除源文件需要你显式操作）。
+
+**本地配置：** 界面语言、输出目录、快捷键等偏好保存在本机用户数据目录（%APPDATA%\clipforge\config.json），不离开你的电脑。
+
+**联网行为：** 本应用核心功能完全离线。仅在你主动检查更新、或微软商店组件自身通信时访问网络。
+
+**第三方组件：** 本应用内置 FFmpeg（GPL v3 许可）用于视频编解码，其源码许可信息见应用「关于」说明。FFmpeg 同样不进行任何数据收集。
+
+**联系方式：** 如对隐私有疑问，请通过微软商店页面提供的开发者联系方式来信。
+
+## English
+
+Last updated: October 2026
+
+ClipForge is developed by an individual developer and published on the Microsoft Store. The app collects, stores and transmits **no personal data**.
+
+**What we collect:** Nothing. The app contains no account system, analytics SDK, advertising components or telemetry.
+
+**Your recordings:** Everything you record is saved only in your local output folder. The developer cannot access these files. Removing a list entry or uninstalling the app never auto-deletes your videos; deleting source files is always an explicit action.
+
+**Local settings:** Preferences such as language, output folder and hotkeys are stored locally in `%APPDATA%\clipforge\config.json` and never leave your PC.
+
+**Network access:** All core features work fully offline. The network is touched only when you manually check for updates, or by Microsoft Store components themselves.
+
+**Third-party components:** The app bundles FFmpeg (GPL v3) for video encoding/decoding. FFmpeg performs no data collection either.
+
+**Contact:** For privacy questions, reach the developer via the contact information on the Microsoft Store page.

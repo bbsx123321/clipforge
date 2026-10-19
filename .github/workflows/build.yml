@@ -1,0 +1,74 @@
+# ClipForge Windows 打包流水线
+# 触发：push v* 标签（打 Release），或 Actions 页面手动运行（仅产出 artifact）
+name: Build Windows Installer
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # full build 必须包含 ddagrab 桌面复制过滤器（录屏核心依赖，essentials 版没有）
+      - name: Download FFmpeg (full build, includes ddagrab)
+        shell: pwsh
+        run: |
+          $zip = "$env:TEMP\ffmpeg-full.zip"
+          Write-Host 'Downloading ffmpeg-release-full.zip ...'
+          Invoke-WebRequest -Uri 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full.zip' -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath "$env:TEMP\ffmpeg-full" -Force
+          New-Item -ItemType Directory -Force -Path resources/ffmpeg | Out-Null
+          $bin = (Get-ChildItem "$env:TEMP\ffmpeg-full" -Recurse -Filter ffmpeg.exe | Select-Object -First 1).FullName
+          $probe = (Get-ChildItem "$env:TEMP\ffmpeg-full" -Recurse -Filter ffprobe.exe | Select-Object -First 1).FullName
+          Copy-Item $bin resources/ffmpeg/ffmpeg.exe -Force
+          Copy-Item $probe resources/ffmpeg/ffprobe.exe -Force
+          $filters = & resources/ffmpeg/ffmpeg.exe -hide_banner -filters 2>&1 | Out-String
+          if (-not $filters.Contains('ddagrab')) {
+            Write-Error 'FFmpeg full build does NOT contain ddagrab - aborting'
+            exit 1
+          }
+          Write-Host 'FFmpeg ready with ddagrab filter'
+
+      - name: Verify sources (typecheck + unit tests)
+        run: |
+          npx tsc --noEmit -p tsconfig.json
+          npx vitest run
+
+      - name: Build app bundle
+        run: npm run build
+
+      - name: Package installers (NSIS Setup + Portable)
+        run: npx electron-builder --win
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: clipforge-windows
+          path: dist/*.exe
+          if-no-files-found: error
+
+      # 仅打标签时发布 Release；手动运行只出 artifact
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/ClipForge Setup *.exe
+            dist/ClipForge *.exe
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

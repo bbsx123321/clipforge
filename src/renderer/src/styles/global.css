@@ -1,0 +1,61 @@
+/**
+ * 全局样式：主题基座、自定义动画与滚动条美化。
+ * Tailwind v4 通过 @import 引入；组件样式走 utility class，这里只放动画与全局元素。
+ */
+@import "tailwindcss";
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+  font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+/* 倒计时数字入场：从放大渐隐收缩到正常 */
+@keyframes countdown-pop {
+  0% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.countdown-pop {
+  animation: countdown-pop 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 录制中的状态灯呼吸 */
+@keyframes recording-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(239 68 68 / 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgb(239 68 68 / 0);
+  }
+}
+
+.recording-breathe {
+  animation: recording-breathe 1.6s ease-in-out infinite;
+}
+
+/* 细滚动条（录制列表） */
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgb(255 255 255 / 0.14);
+  border-radius: 3px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
