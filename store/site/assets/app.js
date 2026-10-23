@@ -1,8 +1,8 @@
 /* ── 多线路下载：依次探测镜像，第一个可用的即用；全部失败回退直连 ── */
-const RELEASE_BASE = 'https://github.com/bbsx321123/clipforge/releases/download/v0.1.0/';
+const RELEASE_BASE = 'https://github.com/bbsx123321/clipforge/releases/download/v1.0.0/';
 const FILES = {
-  setup: 'ClipForge-Setup-0.1.0.exe',
-  portable: 'ClipForge-Portable-0.1.0.exe'
+  setup: 'ClipForge.Setup.1.0.0.exe',
+  portable: 'ClipForge.1.0.0.exe'
 };
 /* 线路标签与按钮状态文案按页面语言（<html lang>）自适应 */
 const IS_EN = document.documentElement.lang === 'en';
