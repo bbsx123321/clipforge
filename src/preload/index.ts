@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { IpcRendererEvent } from 'electron'
 import type { RecordingApi } from '../shared/api'
 import { IPC } from '../shared/ipc-channels'
-import type { EditProject, HotkeyConfig, LogMessage, RecordPhase, RecordSettings, RegionRect, WindowProbe } from '../shared/types'
+import type { EditProject, EditProjectFile, HotkeyConfig, LogMessage, RecordPhase, RecordSettings, RegionRect, SubtitleProgressEvent, WindowProbe } from '../shared/types'
 import type { Lang } from '../shared/strings'
 
 /**
@@ -16,6 +16,7 @@ const api: RecordingApi = {
   resumeRecording: () => ipcRenderer.invoke(IPC.recordResume),
   stopRecording: () => ipcRenderer.invoke(IPC.recordStop),
   sendAudioChunk: (pcmBuffer: ArrayBuffer) => ipcRenderer.send(IPC.audioChunk, pcmBuffer),
+  sendMicAudioChunk: (pcmBuffer: ArrayBuffer) => ipcRenderer.send(IPC.audioMicChunk, pcmBuffer),
   log: (message: LogMessage) => ipcRenderer.send(IPC.appLog, message),
   openRegionPicker: async () => {
     await ipcRenderer.invoke(IPC.regionPickerOpen)
@@ -73,7 +74,16 @@ const api: RecordingApi = {
   getLanguage: () => ipcRenderer.invoke(IPC.languageGet) as Promise<Lang>,
   setLanguage: (lang: Lang) => ipcRenderer.invoke(IPC.languageSet, lang) as Promise<Lang>,
   onLanguageChanged: (handler: (lang: Lang) => void) =>
-    subscribe<Lang>(IPC.languageChanged, handler)
+    subscribe<Lang>(IPC.languageChanged, handler),
+  startTranscription: (dirPath: string, videoFile: string) =>
+    ipcRenderer.invoke(IPC.subtitleRun, dirPath, videoFile) as Promise<boolean>,
+  onSubtitleProgress: (handler: (event: SubtitleProgressEvent) => void) =>
+    subscribe<SubtitleProgressEvent>(IPC.subtitleProgress, handler),
+  loadEditProject: (dirPath: string, videoFile: string, durationSec: number, hasAudio: boolean) =>
+    ipcRenderer.invoke(IPC.editLoad, dirPath, videoFile, durationSec, hasAudio) as Promise<EditProjectFile>,
+  saveEditProject: async (dirPath: string, file: EditProjectFile) => {
+    await ipcRenderer.invoke(IPC.editSave, dirPath, file)
+  }
 }
 
 /** 通用事件订阅：包装监听器并返回取消函数 */

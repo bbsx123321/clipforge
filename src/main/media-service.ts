@@ -1,8 +1,10 @@
 import { spawn } from 'node:child_process'
-import { existsSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs'
+import { copyFileSync, existsSync, readdirSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type { EditProject, ExportResult, Framerate, RecordManifest, RecordingSummary } from '../shared/types'
-import { buildExportArgs } from '../core/exporting/export-args'
+import { buildExportArgs, type ExportSubtitleInputs } from '../core/exporting/export-args'
+import { mapCuesToExportTimeline } from '../core/subtitles/cue-timeline'
+import { toAss, toSrt } from '../core/subtitles/subtitle-serialize'
 import type { VideoEncoderId } from '../recorder/ffmpeg/ffmpeg-args'
 import { buildVideoCodecArgs } from '../recorder/ffmpeg/ffmpeg-args'
 
@@ -19,6 +21,41 @@ type ProbeResult = {
   readonly durationSec: number
   readonly hasAudio: boolean
 }
+
+/** 视频原始尺寸（烧录字幕按此换算 ASS PlayRes，保证所见即所得）；失败回退 1080p */
+export type VideoDimensions = {
+  readonly width: number
+  readonly height: number
+}
+
+export const probeVideoDimensions = (ffprobePath: string, filePath: string): Promise<VideoDimensions> =>
+  new Promise<VideoDimensions>((resolve) => {
+    const child = spawn(ffprobePath, [
+      '-v', 'error',
+      '-select_streams', 'v:0',
+      '-show_entries', 'stream=width,height',
+      '-of', 'json',
+      filePath
+    ], { windowsHide: true })
+    let stdout = ''
+    child.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString('utf8') })
+    child.on('error', () => resolve({ width: 1920, height: 1080 }))
+    child.on('close', () => {
+      try {
+        const streams = (JSON.parse(stdout) as { readonly streams?: readonly { readonly width?: unknown; readonly height?: unknown }[] }).streams
+        const first = streams?.[0]
+        const width: number = Number(first?.width)
+        const height: number = Number(first?.height)
+        if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+          resolve({ width, height })
+          return
+        }
+        resolve({ width: 1920, height: 1080 })
+      } catch {
+        resolve({ width: 1920, height: 1080 })
+      }
+    })
+  })
 
 /** 单次 ffprobe：时长 + 是否有音轨；失败返回零值 */
 export const probeVideo = (ffprobePath: string, filePath: string): Promise<ProbeResult> =>
@@ -151,16 +188,45 @@ export const hideRecordingRecords = (
   return failed
 }
 
-/** 执行导出：构建滤镜命令并等待完成（无超时——长视频导出可达分钟级） */
-export const runExport = (
+/**
+ * 执行导出：构建滤镜命令并等待完成（无超时——长视频导出可达分钟级）。
+ * 字幕（可选）：先映射到成片时间轴并生成临时 ass/srt；
+ * 导出成功且勾选 .srt 时把字幕复制为 <输出名>.srt 成品；临时文件始终清理。
+ */
+export const runExport = async (
   ffmpegPath: string,
+  ffprobePath: string,
   project: EditProject,
   encoder: VideoEncoderId,
   framerate: Framerate,
   outputPath: string
-): Promise<ExportResult> =>
-  new Promise<ExportResult>((resolve) => {
-    const args = buildExportArgs(project, outputPath, buildVideoCodecArgs(encoder, framerate))
+): Promise<ExportResult> => {
+  const subtitles = project.subtitles
+  let assPath: string | undefined
+  let srtPath: string | undefined
+  let srtFinalPath: string | undefined
+  if (subtitles !== undefined) {
+    const exportedCues = mapCuesToExportTimeline(subtitles.cues, project.segments)
+    const outDir: string = path.dirname(outputPath)
+    if (subtitles.options.burn && exportedCues.length > 0) {
+      const dims = await probeVideoDimensions(ffprobePath, project.sourceFilePath)
+      assPath = path.join(outDir, '.export-sub.ass')
+      writeFileSync(assPath, toAss(exportedCues, subtitles.style, dims.width, dims.height), 'utf8')
+    }
+    if ((subtitles.options.softTrack || subtitles.options.srtFile) && exportedCues.length > 0) {
+      srtPath = path.join(outDir, '.export-sub.srt')
+      writeFileSync(srtPath, toSrt(exportedCues), 'utf8')
+      if (subtitles.options.srtFile) {
+        srtFinalPath = outputPath.replace(/\.[^.]+$/, '') + '.srt'
+      }
+    }
+  }
+  const subtitleInputs: ExportSubtitleInputs = {
+    assPath: subtitles?.options.burn === true ? assPath : undefined,
+    srtPath: subtitles?.options.softTrack === true ? srtPath : undefined
+  }
+  const result = await new Promise<ExportResult>((resolve) => {
+    const args = buildExportArgs(project, outputPath, buildVideoCodecArgs(encoder, framerate), subtitleInputs)
     const child = spawn(ffmpegPath, [...args], { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] })
     let stderr = ''
     child.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString('utf8') })
@@ -173,3 +239,22 @@ export const runExport = (
       resolve({ ok: false, error: stderr.slice(-800).trim() || `FFmpeg 退出码 ${String(code)}` })
     })
   })
+  // 导出成功 → .srt 成品落位；临时文件清理（失败也清）
+  if (result.ok && srtFinalPath !== undefined && srtPath !== undefined) {
+    try {
+      copyFileSync(srtPath, srtFinalPath)
+    } catch {
+      // srt 落位失败不影响视频导出结果
+    }
+  }
+  for (const temp of [assPath, srtPath]) {
+    if (temp !== undefined && existsSync(temp)) {
+      try {
+        unlinkSync(temp)
+      } catch {
+        // 清理失败不影响产物
+      }
+    }
+  }
+  return result
+}

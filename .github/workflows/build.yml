@@ -48,6 +48,28 @@ jobs:
           }
           Write-Host 'FFmpeg ready with ddagrab filter'
 
+      # whisper.cpp（CPU x64）+ base 量化模型（字幕语音识别；官方 zip 的 Release/ 内含全套 DLL）
+      - name: Download whisper.cpp + base model
+        shell: pwsh
+        run: |
+          $zip = "$env:TEMP\whisper-bin.zip"
+          $url = 'https://github.com/ggml-org/whisper.cpp/releases/download/b5454/whisper-bin-x64.zip'
+          Write-Host "Downloading $url ..."
+          Invoke-WebRequest -Uri $url -OutFile $zip -MaximumRetryCount 3
+          Expand-Archive -Path $zip -DestinationPath "$env:TEMP\whisper-bin" -Force
+          New-Item -ItemType Directory -Force -Path resources/whisper | Out-Null
+          $release = (Get-ChildItem "$env:TEMP\whisper-bin" -Recurse -Directory -Filter Release | Select-Object -First 1).FullName
+          Copy-Item "$release\whisper-cli.exe" resources/whisper/ -Force
+          Copy-Item "$release\*.dll" resources/whisper/ -Force
+          $modelUrl = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin'
+          Invoke-WebRequest -Uri $modelUrl -OutFile resources/whisper/ggml-base-q5_1.bin -MaximumRetryCount 3
+          $model = Get-Item resources/whisper/ggml-base-q5_1.bin
+          if ($model.Length -lt 50MB) {
+            Write-Error 'whisper model download looks truncated - aborting'
+            exit 1
+          }
+          Write-Host "whisper ready ($($model.Length / 1MB) MB model)"
+
       - name: Verify sources (typecheck + unit tests)
         run: |
           npx tsc --noEmit -p tsconfig.json

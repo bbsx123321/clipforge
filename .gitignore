@@ -8,8 +8,9 @@ logs/
 recordings/
 *.log
 
-# FFmpeg 二进制（本地缓存，不进版本库）
+# FFmpeg / whisper 二进制与模型（本地缓存，不进版本库）
 resources/ffmpeg/
+resources/whisper/
 
 # 编辑器与系统
 .idea/

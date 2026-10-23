@@ -1,4 +1,4 @@
-import type { DisplayInfo, EditProject, ExportResult, HotkeyConfig, LogMessage, OutputDirInfo, RecordPhase, RecordSettings, RecordingSummary, RegionRect, StartRecordingResult, StopRecordingResult, WindowProbe } from './types'
+import type { DisplayInfo, EditProject, EditProjectFile, ExportResult, HotkeyConfig, LogMessage, OutputDirInfo, RecordPhase, RecordSettings, RecordingSummary, RegionRect, StartRecordingResult, StopRecordingResult, SubtitleProgressEvent, WindowProbe } from './types'
 import type { Lang } from './strings'
 
 /**
@@ -13,6 +13,8 @@ export type RecordingApi = {
   readonly stopRecording: () => Promise<StopRecordingResult>
   /** 上报一段 Int16 PCM 音频数据（48kHz 立体声） */
   readonly sendAudioChunk: (pcmBuffer: ArrayBuffer) => void
+  /** 上报一段麦克风独立 Int16 PCM（48kHz 立体声，字幕识别专用，混音流照常上报） */
+  readonly sendMicAudioChunk: (pcmBuffer: ArrayBuffer) => void
   /** 渲染进程日志转发到主进程日志文件 */
   readonly log: (message: LogMessage) => void
   /** 打开全屏区域选区覆盖层 */
@@ -81,4 +83,12 @@ export type RecordingApi = {
   readonly setLanguage: (lang: Lang) => Promise<Lang>
   /** 订阅界面语言变化，返回取消订阅函数 */
   readonly onLanguageChanged: (handler: (lang: Lang) => void) => () => void
+  /** 手动触发/重试字幕识别（后台长任务；返回是否已受理，进度经 onSubtitleProgress 上报） */
+  readonly startTranscription: (dirPath: string, videoFile: string) => Promise<boolean>
+  /** 订阅字幕识别进度，返回取消订阅函数 */
+  readonly onSubtitleProgress: (handler: (event: SubtitleProgressEvent) => void) => () => void
+  /** 读取字幕工程文件（hasAudio 时主进程按需生成波形峰值） */
+  readonly loadEditProject: (dirPath: string, videoFile: string, durationSec: number, hasAudio: boolean) => Promise<EditProjectFile>
+  /** 保存字幕工程文件 */
+  readonly saveEditProject: (dirPath: string, file: EditProjectFile) => Promise<void>
 }

@@ -24,6 +24,8 @@ export type AudioCaptureOptions = {
   readonly systemAudio: boolean
   readonly microphone: boolean
   readonly onChunk: (pcmInt16: ArrayBuffer) => void
+  /** 麦克风独立 PCM 流（字幕识别用）；与混音流并行上报，不替代混音 */
+  readonly onMicChunk: (pcmInt16: ArrayBuffer) => void
 }
 
 const SAMPLE_RATE: number = 48000
@@ -68,10 +70,12 @@ const captureMicrophone = async (): Promise<MediaStream> => {
   })
 }
 
-/** 启动混音采集；任一必需来源失败时抛错，系统声失败但要求了麦克风时自动降级 */
+/** 启动混音采集；任一必需来源失败时抛错，系统声失败但要求了麦克风时自动降级。
+ *  麦克风开启时走双路：并入混音流（导出音轨完整）+ 独立 PCM 流（字幕识别源）。 */
 export const startAudioCapture = async (options: AudioCaptureOptions): Promise<AudioCaptureResult> => {
   const warnings: string[] = []
-  const sources: MediaStreamAudioSourceNode[] = []
+  const systemSources: MediaStreamAudioSourceNode[] = []
+  let micSource: MediaStreamAudioSourceNode | undefined
   const context = new AudioContext({ sampleRate: SAMPLE_RATE })
 
   try {
@@ -80,21 +84,25 @@ export const startAudioCapture = async (options: AudioCaptureOptions): Promise<A
       if (stream === null) {
         warnings.push('系统声音不可用，已自动降级')
       } else {
-        sources.push(context.createMediaStreamSource(stream))
+        systemSources.push(context.createMediaStreamSource(stream))
       }
     }
     if (options.microphone) {
-      sources.push(context.createMediaStreamSource(await captureMicrophone()))
+      micSource = context.createMediaStreamSource(await captureMicrophone())
     }
-    if (sources.length === 0) {
+    if (systemSources.length === 0 && micSource === undefined) {
       throw new Error('没有任何可用的音频来源')
     }
 
     await context.audioWorklet.addModule(WORKLET_URL)
 
+    // 混音链：系统声 + 麦克风全部并入（保持导出音轨与既有行为一致）
     const merged = context.createGain()
-    for (const source of sources) {
+    for (const source of systemSources) {
       source.connect(merged)
+    }
+    if (micSource !== undefined) {
+      micSource.connect(merged)
     }
 
     const pumper = new AudioWorkletNode(context, 'chunk-pumper', { outputChannelCount: [2] })
@@ -102,19 +110,41 @@ export const startAudioCapture = async (options: AudioCaptureOptions): Promise<A
       options.onChunk(event.data)
     }
     merged.connect(pumper)
+
+    // 麦克风独立链：同一 worklet 模块的第二个实例，仅采集麦克风（字幕识别源）
+    let micPumper: AudioWorkletNode | undefined
+    let micGain: GainNode | undefined
+    if (micSource !== undefined) {
+      micGain = context.createGain()
+      micPumper = new AudioWorkletNode(context, 'chunk-pumper', { outputChannelCount: [2] })
+      micPumper.port.onmessage = (event: MessageEvent<ArrayBuffer>) => {
+        options.onMicChunk(event.data)
+      }
+      micSource.connect(micGain)
+      micGain.connect(micPumper)
+    }
+
     // 连接 destination 以维持音频线程拉取；worklet 输出恒为静音，不会外放
     pumper.connect(context.destination)
+    micPumper?.connect(context.destination)
     await context.resume()
 
     const handle: AudioCaptureHandle = {
       stop: async () => {
         pumper.port.onmessage = null
         pumper.disconnect()
+        if (micPumper !== undefined) {
+          micPumper.port.onmessage = null
+          micPumper.disconnect()
+          micGain?.disconnect()
+        }
         merged.disconnect()
-        for (const source of sources) {
+        for (const source of systemSources) {
           source.disconnect()
         }
-        for (const source of sources) {
+        micSource?.disconnect()
+        const allSources: readonly MediaStreamAudioSourceNode[] = [...systemSources, ...(micSource !== undefined ? [micSource] : [])]
+        for (const source of allSources) {
           for (const track of source.mediaStream.getTracks()) {
             track.stop()
           }

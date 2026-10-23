@@ -2,11 +2,12 @@ import { app, BrowserWindow, dialog, ipcMain, screen } from 'electron'
 import log from 'electron-log/main'
 import path from 'node:path'
 import { IPC } from '../shared/ipc-channels'
-import type { DisplayInfo, EditProject, LogMessage, RecordSettings, RegionRect, WindowProbe } from '../shared/types'
+import type { DisplayInfo, EditProject, EditProjectFile, LogMessage, RecordSettings, RegionRect, WindowProbe } from '../shared/types'
 import {
   currentPhase,
   getOutputDirInfo,
   onAudioChunk,
+  onMicAudioChunk,
   pauseRecording,
   resumeRecording,
   setCustomOutputDir,
@@ -16,6 +17,12 @@ import {
 } from './record-controller'
 import { armRecording, applyHotkeys, cancelArm, currentHotkeys, currentShellLang, setShellLang, updateArmSnapshot } from './shell'
 import { deleteRecordingFiles, hideRecordingRecords, listRecordings, runExport } from './media-service'
+import {
+  loadSubtitleProject,
+  saveSubtitleProject,
+  startTranscription,
+  whisperResourcesAvailable
+} from './services/subtitle-service'
 import { isValidHotkeyConfig } from '../core/hotkeys'
 import { loadAppConfig, saveAppConfig } from '../recorder/app-settings'
 import { disposeWindowProbe, probeWindowAt, warmupWindowProbe } from '../recorder/window-rect'
@@ -131,6 +138,21 @@ export const registerIpcHandlers = (deps: IpcDeps): void => {
     return true
   })
   ipcMain.on(IPC.audioChunk, (_event, buffer: ArrayBuffer) => onAudioChunk(buffer))
+  ipcMain.on(IPC.audioMicChunk, (_event, buffer: ArrayBuffer) => onMicAudioChunk(buffer))
+  // 字幕识别为后台长任务：受理即返回，进度经 subtitle/progress 广播
+  ipcMain.handle(IPC.subtitleRun, (_event, dirPath: string, videoFile: string) => {
+    if (!whisperResourcesAvailable()) {
+      return false
+    }
+    void startTranscription(dirPath, videoFile)
+    return true
+  })
+  ipcMain.handle(IPC.editLoad, (_event, dirPath: string, videoFile: string, durationSec: number, hasAudio: boolean) =>
+    loadSubtitleProject(dirPath, videoFile, durationSec, hasAudio))
+  ipcMain.handle(IPC.editSave, (_event, dirPath: string, file: EditProjectFile) => {
+    saveSubtitleProject(dirPath, file)
+    return true
+  })
   ipcMain.on(IPC.appLog, (_event, message: LogMessage) => writeRendererLog(message))
   ipcMain.on(IPC.regionSelected, (_event, region: RegionRect) => {
     log.info(`[region] 选定区域：${JSON.stringify(region)}`)
@@ -236,7 +258,7 @@ export const registerIpcHandlers = (deps: IpcDeps): void => {
     }
     log.info(`[export] 开始导出：${String(project.segments.length)} 段 → ${dialogResult.filePath}`)
     const encoder = await warmUpEncoderProbe()
-    const result = await runExport(deps.ffmpegPath, project, encoder, 30, dialogResult.filePath)
+    const result = await runExport(deps.ffmpegPath, deps.ffprobePath, project, encoder, 30, dialogResult.filePath)
     if (result.ok) {
       log.info(`[export] 导出完成：${result.outputPath}`)
     } else {

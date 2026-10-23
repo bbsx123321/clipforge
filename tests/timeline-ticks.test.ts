@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calculateTicks, formatTick } from '../src/renderer/src/components/editor/TimelineTrack'
+import { calculateTicks, formatTick } from '../src/core/editing/timeline-math'
 
 describe('时间轴刻度计算', () => {
   it('短视频用小步长', () => {

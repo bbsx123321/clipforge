@@ -113,7 +113,8 @@ export const App = (): JSX.Element => {
         const result: AudioCaptureResult = await startAudioCapture({
           systemAudio: settings.captureSystemAudio,
           microphone: settings.captureMicrophone,
-          onChunk: (chunk) => window.api.sendAudioChunk(chunk)
+          onChunk: (chunk) => window.api.sendAudioChunk(chunk),
+          onMicChunk: (chunk) => window.api.sendMicAudioChunk(chunk)
         })
         audioHandleRef.current = result.handle
         if (result.warnings.length > 0) {
@@ -253,10 +254,10 @@ export const App = (): JSX.Element => {
     }
   }, [phase])
 
-  // 窗口尺寸随视图切换：编辑器大窗 / 设置展开 / 有录制列表 / 基础悬浮条
+  // 窗口尺寸随视图切换：编辑器大窗（三轨+字幕面板）/ 设置展开 / 有录制列表 / 基础悬浮条
   useEffect(() => {
     if (editing !== undefined) {
-      void window.api.resizeControlWindow(840, 660)
+      void window.api.resizeControlWindow(900, 760)
       return
     }
     if (expanded) {

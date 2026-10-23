@@ -1,14 +1,17 @@
-import { app, desktopCapturer, session } from 'electron'
+import { app, BrowserWindow, desktopCapturer, session } from 'electron'
 import path from 'node:path'
 import { resolveFfmpegPath } from '../recorder/ffmpeg/ffmpeg-path'
 import { resolveFfprobePath } from '../recorder/ffmpeg/ffmpeg-path'
 import { initLogging } from './log'
 import { registerIpcHandlers } from './ipc'
-import { currentPhase, initRecordController, setPhaseListener, setRecordErrorListener, warmUpEncoderProbe } from './record-controller'
+import { currentPhase, initRecordController, setPhaseListener, setRecordErrorListener, setSessionFinalizedListener, warmUpEncoderProbe } from './record-controller'
+import { handleSessionFinalized, initSubtitleService } from './services/subtitle-service'
+import { resolveWhisperCliPath, resolveWhisperModelPath } from '../recorder/asr/whisper-path'
 import { runArmFlow, runMediaProbeFlow, runRegionFlow, runSmokeAudioFlow, runSmokeFlow } from './flows/smoke'
 import { runRegionVerboseFlow, runSpawnMatrixFlow, runWindowHoverFlow, runWindowProbeFlow } from './flows/diagnostics'
 import { runManageFlow } from './flows/smoke-manage'
 import { runI18nFlow } from './flows/smoke-i18n'
+import { runSubtitleFlow } from './flows/smoke-subtitle'
 import { runStoreShotsFlow } from './flows/screenshot'
 import { createTray, disposeShell, handlePhaseForShell, primeHotkeys, registerGlobalShortcuts, setShellLang } from './shell'
 import { registerAppProtocol, registerAppSchemePrivileges } from './media-protocol'
@@ -37,10 +40,16 @@ const isSmokeMode: boolean =
   process.argv.includes('--smoke-audio') ||
   process.argv.includes('--smoke-manage') ||
   process.argv.includes('--smoke-i18n') ||
+  process.argv.includes('--smoke-subtitle') ||
   process.argv.includes('--make-store-shots')
 
-/** 单实例锁：第二个实例直接退出，由首个实例唤起窗口 */
-const gotInstanceLock: boolean = app.requestSingleInstanceLock()
+/** 单实例锁：第二个实例直接退出，由首个实例唤起窗口。
+ *  冒烟/诊断模式例外：绕过锁直接运行（本机常开着正式实例，自动化流程不应被静默吞掉）。 */
+const isAutomationRun: boolean = process.argv.some((arg) =>
+  arg.startsWith('--smoke') || arg === '--spawn-matrix' || arg === '--region-verbose' ||
+  arg === '--window-probe' || arg === '--make-store-shots'
+)
+const gotInstanceLock: boolean = isAutomationRun || app.requestSingleInstanceLock()
 if (!gotInstanceLock) {
   app.quit()
 }
@@ -112,6 +121,25 @@ if (gotInstanceLock) {
       userDataDir
     })
 
+    // 字幕识别服务：whisper 二进制/模型缺失时优雅降级（不影响录制）
+    const whisperCliPath: string = resolveWhisperCliPath(appRoot, app.isPackaged)
+    const whisperModelPath: string = resolveWhisperModelPath(appRoot, app.isPackaged)
+    initSubtitleService({
+      ffmpegPath,
+      ffprobePath,
+      whisperCliPath,
+      whisperModelPath,
+      broadcastProgress: (event) => {
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send(IPC.subtitleProgress, event)
+          }
+        }
+      }
+    })
+    // 会话收尾 → 自动字幕识别（开麦克风且资源齐备时后台执行）
+    setSessionFinalizedListener(handleSessionFinalized)
+
     registerIpcHandlers({
       getControlWindow,
       openOverlay: () => createOverlayWindow('region'),
@@ -158,6 +186,8 @@ if (gotInstanceLock) {
       void runManageFlow()
     } else if (process.argv.includes('--smoke-i18n')) {
       void runI18nFlow()
+    } else if (process.argv.includes('--smoke-subtitle')) {
+      void runSubtitleFlow(ffmpegPath, ffprobePath)
     } else if (process.argv.includes('--smoke-audio')) {
       void runSmokeAudioFlow()
     } else if (isSmokeMode) {

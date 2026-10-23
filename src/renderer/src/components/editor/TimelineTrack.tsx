@@ -2,6 +2,7 @@ import type { JSX } from 'react'
 import { useRef } from 'react'
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, RefObject } from 'react'
 import type { EditSegment } from '../../../../shared/types'
+import { calculateTicks, clientXToSeconds, formatTick, secondsToPct } from '../../../../core/editing/timeline-math'
 import { useT } from '../../i18n'
 
 /** 轨道轴属性 */
@@ -22,35 +23,6 @@ export type TimelineTrackProps = {
   readonly onMovePoint: (which: 'a' | 'b', seconds: number) => void
 }
 
-/** 候选刻度步长（秒），取第一个使刻度数不超过上限的步长 */
-const TICK_STEPS: readonly number[] = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1200]
-const MAX_TICKS: number = 7
-
-/** 计算时间刻度（纯函数）：返回 [0, step, 2*step, …] 直到时长 */
-export const calculateTicks = (durationSec: number): readonly number[] => {
-  if (!Number.isFinite(durationSec) || durationSec <= 0) {
-    return [0]
-  }
-  const fallbackStep: number = TICK_STEPS[TICK_STEPS.length - 1] ?? 1200
-  const step: number = TICK_STEPS.find((candidate) => durationSec / candidate <= MAX_TICKS) ?? fallbackStep
-  const ticks: number[] = []
-  for (let t = 0; t <= durationSec + 0.001; t += step) {
-    ticks.push(Math.round(t * 1000) / 1000)
-  }
-  return ticks
-}
-
-/** 秒 → 刻度短文本（纯函数）：整分显示 m:ss，不足一分钟显示 s" 或 m:ss */
-export const formatTick = (seconds: number): string => {
-  if (seconds < 60 && seconds % 1 !== 0) {
-    return `${String(seconds)}s`
-  }
-  const total = Math.floor(seconds)
-  return total < 60
-    ? `${String(total)}s`
-    : `${String(Math.floor(total / 60))}:${String(total % 60).padStart(2, '0')}`
-}
-
 /** 时间轴轨道：可拖动「开始/结束」标记 + 时间刻度 + 片段块 + 选区 + 播放头 */
 export const TimelineTrack = (props: TimelineTrackProps): JSX.Element => {
   const { durationSec, segments, selection, trimMode, playheadSec, pointA, pointB, onSeek, onPickPoint, onMovePoint } = props
@@ -58,21 +30,14 @@ export const TimelineTrack = (props: TimelineTrackProps): JSX.Element => {
   const trackRef = useRef<HTMLDivElement | null>(null) as RefObject<HTMLDivElement | null>
   const ticks = calculateTicks(durationSec)
 
-  const pct = (seconds: number): string =>
-    `${String(Math.min(100, Math.max(0, (seconds / Math.max(durationSec, 0.001)) * 100)))}%`
+  const pct = (seconds: number): string => secondsToPct(seconds, durationSec)
 
   /** 容器内横向坐标 → 秒 */
-  const clientXToSeconds = (clientX: number): number => {
-    const rect = trackRef.current?.getBoundingClientRect()
-    if (rect === undefined) {
-      return 0
-    }
-    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width))
-    return ratio * durationSec
-  }
+  const toSeconds = (clientX: number): number =>
+    clientXToSeconds(clientX, trackRef.current?.getBoundingClientRect(), durationSec)
 
   const handleClick = (event: ReactMouseEvent<HTMLDivElement>): void => {
-    const seconds = clientXToSeconds(event.clientX)
+    const seconds = toSeconds(event.clientX)
     if (trimMode) {
       onPickPoint(seconds)
     } else {
@@ -84,12 +49,12 @@ export const TimelineTrack = (props: TimelineTrackProps): JSX.Element => {
   const handleMarkerDrag = (which: 'a' | 'b') => (event: ReactPointerEvent<HTMLDivElement>): void => {
     event.stopPropagation()
     event.currentTarget.setPointerCapture(event.pointerId)
-    onMovePoint(which, clientXToSeconds(event.clientX))
+    onMovePoint(which, toSeconds(event.clientX))
   }
   const handleMarkerMove = (which: 'a' | 'b') => (event: ReactPointerEvent<HTMLDivElement>): void => {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.stopPropagation()
-      onMovePoint(which, clientXToSeconds(event.clientX))
+      onMovePoint(which, toSeconds(event.clientX))
     }
   }
 

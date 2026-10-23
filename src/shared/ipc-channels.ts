@@ -16,6 +16,8 @@ export const IPC = {
   recordError: 'record/error',
   /** 音频 PCM 块上报（渲染进程 → 主进程，send） */
   audioChunk: 'audio/chunk',
+  /** 麦克风独立 PCM 块上报（渲染进程 → 主进程，send；字幕识别专用副本，不影响混音流） */
+  audioMicChunk: 'audio/mic-chunk',
   /** 渲染进程日志转发（渲染进程 → 主进程，send） */
   appLog: 'app/log',
   /** 区域选区确认（overlay 窗口 → 主进程 → 控制条窗口） */
@@ -77,7 +79,15 @@ export const IPC = {
   /** 设置界面语言并持久化（invoke；主进程同步刷新托盘文案） */
   languageSet: 'language/set',
   /** 界面语言变化广播（主进程 → 全部窗口） */
-  languageChanged: 'language/changed'
+  languageChanged: 'language/changed',
+  /** 手动触发/重试字幕识别（invoke；识别为后台长任务，进度走 progress 事件） */
+  subtitleRun: 'subtitle/run',
+  /** 字幕识别进度广播（主进程 → 全部窗口） */
+  subtitleProgress: 'subtitle/progress',
+  /** 读取字幕工程文件（invoke；hasAudio 时顺带按需生成波形） */
+  editLoad: 'edit/load',
+  /** 保存字幕工程文件（invoke） */
+  editSave: 'edit/save'
 } as const
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC]

@@ -28,3 +28,33 @@ export const runFfmpegOnce = (ffmpegPath: string, args: readonly string[], timeo
  */
 export const spawnFfmpegRecord = (ffmpegPath: string, args: readonly string[]): ChildProcess =>
   spawn(ffmpegPath, [...args], { windowsHide: true, stdio: ['pipe', 'ignore', 'pipe'] })
+
+/**
+ * 一次性运行 FFmpeg 并收集全部 stdout 二进制数据（波形 PCM 提取用）。
+ * 退出码 0 返回拼接 Buffer；启动失败、超时、非零退出返回 undefined。
+ */
+export const runFfmpegCollectStdout = (
+  ffmpegPath: string,
+  args: readonly string[],
+  timeoutMs: number
+): Promise<Buffer | undefined> =>
+  new Promise<Buffer | undefined>((resolve) => {
+    let settled: boolean = false
+    const settle = (result: Buffer | undefined): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolve(result)
+    }
+    const child: ChildProcess = spawn(ffmpegPath, [...args], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] })
+    const timer = setTimeout(() => {
+      child.kill()
+      settle(undefined)
+    }, timeoutMs)
+    const chunks: Buffer[] = []
+    child.stdout?.on('data', (chunk: Buffer) => {
+      chunks.push(chunk)
+    })
+    child.on('error', () => settle(undefined))
+    child.on('close', (code) => settle(code === 0 ? Buffer.concat(chunks) : undefined))
+  })

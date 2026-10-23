@@ -141,6 +141,76 @@ export type EditProject = {
   readonly durationSec: number
   readonly hasAudio: boolean
   readonly segments: readonly EditSegment[]
+  /** 字幕数据（开启任一字幕导出方式时携带） */
+  readonly subtitles: EditProjectSubtitles | undefined
+}
+
+/** 字幕条目（时间均为源视频内秒数） */
+export type SubtitleCue = {
+  readonly id: string
+  readonly startSec: number
+  readonly endSec: number
+  readonly text: string
+}
+
+/** 字幕样式（编辑器预览与烧录渲染共用同一组参数，所见即所得） */
+export type SubtitleStyle = {
+  /** 字号（视频高度的百分比，3~8） */
+  readonly fontSizePct: number
+  /** 显示位置：底部 / 顶部 */
+  readonly position: 'bottom' | 'top'
+  /** 距底/顶边距（视频高度的百分比，2~20） */
+  readonly marginPct: number
+  /** 文字不透明度（0.5~1） */
+  readonly textOpacity: number
+  /** 黑底开关 */
+  readonly boxEnabled: boolean
+  /** 黑底不透明度（0.3~1） */
+  readonly boxOpacity: number
+}
+
+/** 导出时的字幕选项（三种方式可任意组合） */
+export type ExportSubtitleOptions = {
+  /** 烧录进画面（libass 滤镜） */
+  readonly burn: boolean
+  /** 导出同名独立 .srt 文件 */
+  readonly srtFile: boolean
+  /** MP4 内嵌 mov_text 软字幕轨 */
+  readonly softTrack: boolean
+}
+
+/** 导出载荷中的字幕数据 */
+export type EditProjectSubtitles = {
+  readonly cues: readonly SubtitleCue[]
+  readonly style: SubtitleStyle
+  readonly options: ExportSubtitleOptions
+}
+
+/** 识别状态（工程文件内嵌，编辑器据此渲染状态条） */
+export type AsrStatus = 'none' | 'pending' | 'ready' | 'failed'
+
+/** 识别进度广播（主进程 → 渲染端，编辑器按 dirPath+videoFile 匹配当前工程） */
+export type SubtitleProgressEvent = {
+  readonly dirPath: string
+  readonly videoFile: string
+  readonly progress: number
+}
+
+/** 字幕工程文件（每视频段一份，session 目录下与视频同名 .edit.json） */
+export type EditProjectFile = {
+  readonly version: 1
+  /** 所属视频分段文件名（如 screen-001.mp4） */
+  readonly sourceFile: string
+  readonly segments: readonly EditSegment[]
+  readonly cues: readonly SubtitleCue[]
+  readonly style: SubtitleStyle
+  /** 混音轨波形峰值包络（每 0.1s 一点，0~1 归一化；空数组 = 未生成） */
+  readonly waveform: readonly number[]
+  readonly asr: {
+    readonly status: AsrStatus
+    readonly progress: number
+    readonly error: string | undefined
+  }
 }
 
 export type ExportResult =

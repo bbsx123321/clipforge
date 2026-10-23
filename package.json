@@ -32,6 +32,13 @@
         ]
       },
       {
+        "from": "resources/whisper",
+        "to": "whisper",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
         "from": "resources/icons",
         "to": "icons",
         "filter": [

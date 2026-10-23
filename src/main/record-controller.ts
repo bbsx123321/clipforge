@@ -50,6 +50,9 @@ type ControllerState = {
   segmentIndex: number
   wav: WavStreamWriter | undefined
   wavHasData: boolean
+  /** 麦克风独立写入器（字幕识别源；仅 captureMicrophone 时创建） */
+  micWav: WavStreamWriter | undefined
+  micWavHasData: boolean
   /** 音频已全部成功合成进视频分段（清单不再登记独立音频文件） */
   audioMuxed: boolean
   encoder: VideoEncoderId | undefined
@@ -67,11 +70,14 @@ let state: ControllerState = {
   segmentIndex: 0,
   wav: undefined,
   wavHasData: false,
+  micWav: undefined,
+  micWavHasData: false,
   audioMuxed: false,
   encoder: undefined
 }
 let phaseListener: ((phase: RecordPhase) => void) | undefined
 let errorListener: ((message: string) => void) | undefined
+let sessionFinalizedListener: ((event: SessionFinalizedEvent) => void) | undefined
 let encoderProbePromise: Promise<VideoEncoderId> | undefined
 let customOutputDir: string | undefined
 let healthTimer: NodeJS.Timeout | undefined
@@ -175,6 +181,20 @@ export const setRecordErrorListener = (listener: (message: string) => void): voi
 /** 注册录制阶段变化监听（用于向渲染进程广播） */
 export const setPhaseListener = (listener: (phase: RecordPhase) => void): void => {
   phaseListener = listener
+}
+
+/** 会话收尾事件（正常停止 / 意外退出 / 健康检测终止共用）：字幕识别等后置任务的触发入口 */
+export type SessionFinalizedEvent = {
+  readonly rootDir: string
+  readonly settings: RecordSettings
+  readonly segments: readonly RecordingSegment[]
+  /** 麦克风独立音频文件名（无数据时为 undefined，识别任务据此跳过） */
+  readonly micAudioFile: string | undefined
+}
+
+/** 注册会话收尾监听（字幕服务接线用；监听器自行负责异步，不阻塞收尾） */
+export const setSessionFinalizedListener = (listener: (event: SessionFinalizedEvent) => void): void => {
+  sessionFinalizedListener = listener
 }
 
 /** 后台预热编码器探测，避免首次点「开始录制」时卡顿 */
@@ -326,6 +346,8 @@ const finalizeRecordingSession = async (extraWarnings: readonly string[]): Promi
   }
   state.wav?.close()
   state.wav = undefined
+  state.micWav?.close()
+  state.micWav = undefined
   const remuxWarnings = await remuxPendingSegments()
   const muxWarnings = await muxAudioIntoSegments()
   const warnings = [...extraWarnings, ...remuxWarnings, ...muxWarnings, ...undersizedSegmentWarnings(state.rootDir, state.segments)]
@@ -347,6 +369,13 @@ const finalizeRecordingSession = async (extraWarnings: readonly string[]): Promi
     warnings
   })
   writeFileSync(path.join(state.rootDir, 'session.json'), JSON.stringify(manifest, null, 2), 'utf8')
+  // 会话收尾事件：字幕识别等后置任务入口（监听器自行异步执行，此处不等待）
+  sessionFinalizedListener?.({
+    rootDir: state.rootDir,
+    settings: state.settings,
+    segments: state.segments,
+    micAudioFile: state.micWavHasData ? 'mic.wav' : undefined
+  })
   return { outputDir: state.rootDir, warnings }
 }
 
@@ -411,6 +440,11 @@ export const startRecording = async (settings: RecordSettings): Promise<StartRec
       ? new WavStreamWriter(path.join(state.rootDir, 'audio-mix.wav'), WAV_SAMPLE_RATE, WAV_CHANNELS)
       : undefined
     state.wavHasData = false
+    // 麦克风独立流：即使系统声降级失败也要建（识别只依赖麦克风）
+    state.micWav = settings.captureMicrophone
+      ? new WavStreamWriter(path.join(state.rootDir, 'mic.wav'), WAV_SAMPLE_RATE, WAV_CHANNELS)
+      : undefined
+    state.micWavHasData = false
     state.audioMuxed = false
     fallbackActive = false
     captureAttempts = 0
@@ -483,6 +517,16 @@ export const onAudioChunk = (arrayBuffer: ArrayBuffer): void => {
   }
   wav.append(Buffer.from(arrayBuffer))
   state.wavHasData = true
+}
+
+/** 接收渲染进程上报的麦克风独立 PCM 块（48kHz 立体声 Int16；字幕识别源） */
+export const onMicAudioChunk = (arrayBuffer: ArrayBuffer): void => {
+  const micWav = state.micWav
+  if (micWav === undefined) {
+    return
+  }
+  micWav.append(Buffer.from(arrayBuffer))
+  state.micWavHasData = true
 }
 
 /** 当前录制阶段（供状态查询） */
